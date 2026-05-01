@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GmailSec — Live Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#020c14;--bg2:#050f1a;--surface:#0a1e2e;
+  --border:#0d4f72;--border2:#0a3552;
+  --cyan:#00e5ff;--green:#00ff88;--red:#ff2244;
+  --orange:#ff6f00;--yellow:#ffd600;--purple:#b04fff;
+  --text:#cce8f4;--dim:#2d5a72;--dim2:#5a8fa8;
+}
+body{background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;min-height:100vh;overflow-x:hidden}
+.grid{position:fixed;inset:0;background-image:linear-gradient(rgba(0,229,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,255,0.04) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;z-index:0}
+.scanlines{position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.1) 2px,rgba(0,0,0,0.1) 4px);pointer-events:none;z-index:999}
+
+/* ── Header ── */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:13px 26px;border-bottom:1px solid var(--border);background:rgba(2,12,20,0.95);backdrop-filter:blur(10px);position:sticky;top:0;z-index:100}
+.logo-text{font-family:'Orbitron',monospace;font-size:17px;font-weight:900;color:var(--cyan);letter-spacing:4px}
+.logo-text span{color:var(--green)}
+.logo-sub{font-size:8px;color:var(--dim);letter-spacing:2px;margin-top:2px}
+.hdr-r{display:flex;align-items:center;gap:14px}
+.live-pill{display:flex;align-items:center;gap:6px;padding:5px 12px;border:1px solid rgba(0,255,136,0.3);border-radius:50px;background:rgba(0,255,136,0.05);font-size:9px;letter-spacing:2px;color:var(--green)}
+.live-pill.alert{border-color:rgba(255,34,68,0.5);background:rgba(255,34,68,0.08);color:var(--red);animation:alertPill 1s ease infinite}
+@keyframes alertPill{0%,100%{opacity:1}50%{opacity:0.5}}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pd 1.2s infinite}
+.live-pill.alert .live-dot{background:var(--red)}
+@keyframes pd{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.3;transform:scale(1.4)}}
+.clk{font-size:9px;color:var(--dim2)}
+.btn-sm{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;background:none;border:1px solid var(--border2);border-radius:3px;padding:5px 10px;cursor:pointer;color:var(--dim2);transition:all 0.2s;text-decoration:none}
+.btn-sm:hover{color:var(--cyan);border-color:var(--cyan)}
+.btn-sm.red{border-color:rgba(255,34,68,0.3);color:var(--red)}
+.btn-sm.red:hover{border-color:var(--red);background:rgba(255,34,68,0.08)}
+
+/* ── Layout ── */
+.main{position:relative;z-index:1;padding:16px 26px;max-width:1400px;margin:0 auto}
+
+/* ── Account bar ── */
+.acct-bar{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 16px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.acct-email{font-size:13px;color:var(--cyan);letter-spacing:1px}
+.acct-label{font-size:8px;letter-spacing:3px;color:var(--dim);margin-bottom:2px}
+.next-check{font-size:9px;color:var(--dim2)}
+
+/* ── Stats ── */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.sc{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:13px 15px;position:relative;overflow:hidden;transition:all 0.4s}
+.sc.alert-state{border-color:rgba(255,34,68,0.5);box-shadow:0 0 16px rgba(255,34,68,0.1)}
+.sn{font-family:'Orbitron',monospace;font-size:28px;font-weight:700;color:var(--cyan);line-height:1;transition:all 0.4s}
+.sc.events .sn{color:var(--orange)}
+.sc.crits .sn{color:var(--red)}
+.sc.alerts .sn{color:var(--purple)}
+.sl{font-size:8px;letter-spacing:2px;color:var(--dim);margin-top:3px}
+.si{position:absolute;top:10px;right:12px;font-size:17px;opacity:0.2}
+
+/* ── Status card ── */
+.status-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-bottom:14px;position:relative;overflow:hidden}
+.status-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);opacity:0.6}
+.status-card.alerting::before{background:linear-gradient(90deg,transparent,var(--red),transparent);animation:scanpulse 1.5s ease infinite}
+@keyframes scanpulse{0%,100%{opacity:0.6}50%{opacity:1}}
+.ctitle{font-size:9px;letter-spacing:3px;color:#00bcd4;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.ctitle::before{content:'';display:inline-block;width:10px;height:1px;background:var(--cyan)}
+.status-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.status-item{background:var(--bg2);border:1px solid var(--border2);border-radius:3px;padding:10px 12px;text-align:center;transition:all 0.4s}
+.status-item.active{border-color:var(--green);box-shadow:0 0 8px rgba(0,255,136,0.15)}
+.status-item.warning{border-color:var(--red);box-shadow:0 0 8px rgba(255,34,68,0.15);animation:sp 1s ease infinite}
+@keyframes sp{0%,100%{border-color:var(--red)}50%{border-color:rgba(255,34,68,0.3)}}
+.si-icon{font-size:20px;margin-bottom:5px}
+.si-label{font-size:8px;letter-spacing:2px;color:var(--dim2)}
+.si-val{font-size:10px;color:var(--text);margin-top:3px;letter-spacing:1px}
+.si-val.ok{color:var(--green)}
+.si-val.warn{color:var(--red)}
+.si-val.info{color:var(--cyan)}
+
+/* ── Alert actions ── */
+.alert-actions{background:rgba(255,34,68,0.07);border:1px solid rgba(255,34,68,0.4);border-radius:4px;padding:12px 16px;margin-bottom:14px;display:none;align-items:center;gap:12px;animation:abp 2s ease infinite}
+@keyframes abp{0%,100%{border-color:rgba(255,34,68,0.4)}50%{border-color:rgba(255,34,68,0.1)}}
+.alert-actions.show{display:flex}
+.aa-icon{font-size:22px;animation:sk 0.6s ease infinite alternate}
+@keyframes sk{from{transform:rotate(-6deg)}to{transform:rotate(6deg)}}
+.aa-text{flex:1}
+.aa-title{font-family:'Orbitron',monospace;font-size:12px;color:var(--red);letter-spacing:2px;font-weight:700}
+.aa-sub{font-size:9px;color:var(--dim2);margin-top:3px;letter-spacing:1px}
+.aa-btns{display:flex;gap:7px}
+.btn-act{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:2px;padding:7px 11px;border-radius:3px;cursor:pointer;border:none;transition:all 0.2s}
+.btn-act.voice{background:var(--red);color:#fff}
+.btn-act.voice:hover{background:#cc001a}
+.btn-act.test{background:rgba(176,79,255,0.2);color:var(--purple);border:1px solid rgba(176,79,255,0.4)}
+.btn-act.test:hover{background:rgba(176,79,255,0.3)}
+.btn-act.stop{background:var(--surface);color:var(--dim2);border:1px solid var(--border2)}
+
+/* ── Twilio panel ── */
+.twilio-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}
+.tw-card{background:var(--surface);border:1px solid var(--border2);border-radius:4px;padding:12px 16px;display:flex;align-items:center;gap:12px;transition:all 0.4s;position:relative;overflow:hidden}
+.tw-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--purple),transparent);opacity:0.5}
+.tw-card.sent{border-color:rgba(0,255,136,0.4)}
+.tw-card.error{border-color:rgba(255,34,68,0.4)}
+.tw-card.calling{border-color:var(--purple);animation:tcp 1s ease infinite}
+@keyframes tcp{0%,100%{box-shadow:0 0 0}50%{box-shadow:0 0 12px rgba(176,79,255,0.3)}}
+.tw-icon{font-size:24px;flex-shrink:0}
+.tw-label{font-size:8px;letter-spacing:2px;color:var(--dim);margin-bottom:3px}
+.tw-status{font-size:11px;font-weight:700;letter-spacing:1px;transition:color 0.3s}
+.tw-status.idle{color:var(--dim2)}
+.tw-status.sent{color:var(--green)}
+.tw-status.calling{color:var(--purple)}
+.tw-status.error{color:var(--red)}
+.tw-detail{font-size:9px;color:var(--dim2);margin-top:2px;letter-spacing:0.5px}
+
+/* ── Events feed ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:14px 18px;margin-bottom:14px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:0.4}
+.events-list{display:flex;flex-direction:column;gap:6px;max-height:340px;overflow-y:auto}
+.events-list::-webkit-scrollbar{width:3px}
+.events-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.event-item{
+  background:var(--bg2);border:1px solid var(--border2);
+  border-radius:4px;padding:12px 14px;
+  display:flex;align-items:flex-start;gap:12px;
+  animation:ei 0.4s ease both;
+  transition:border-color 0.3s;
+}
+.event-item.CRITICAL,.event-item.new{border-left:3px solid var(--red)}
+.event-item.HIGH{border-left:3px solid var(--orange)}
+.event-item.MEDIUM{border-left:3px solid var(--yellow)}
+@keyframes ei{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:translateX(0)}}
+.ev-icon{font-size:20px;flex-shrink:0}
+.ev-body{flex:1}
+.ev-title{font-size:11px;font-weight:700;letter-spacing:1px;margin-bottom:4px}
+.ev-title.CRITICAL{color:var(--red)}
+.ev-title.HIGH{color:var(--orange)}
+.ev-title.MEDIUM{color:var(--yellow)}
+.ev-subject{font-size:9px;color:var(--dim2);margin-bottom:4px;letter-spacing:0.5px}
+.ev-meta{display:flex;gap:8px;flex-wrap:wrap}
+.ev-tag{display:inline-block;padding:1px 6px;background:rgba(0,229,255,0.06);border:1px solid var(--border2);border-radius:2px;color:var(--dim2);font-size:8px}
+.ev-time{font-size:9px;color:var(--dim);white-space:nowrap;margin-top:2px}
+.badge{display:inline-block;padding:2px 7px;border-radius:2px;font-size:8px;font-weight:700;letter-spacing:1px;margin-right:6px}
+.CRITICAL{background:rgba(255,34,68,0.2);color:var(--red);border:1px solid var(--red)}
+.HIGH{background:rgba(255,111,0,0.2);color:var(--orange);border:1px solid var(--orange)}
+.MEDIUM{background:rgba(255,214,0,0.15);color:var(--yellow);border:1px solid var(--yellow)}
+
+.empty-state{text-align:center;padding:40px 20px;color:var(--dim)}
+.empty-icon{font-size:40px;margin-bottom:12px;opacity:0.35}
+.empty-title{font-size:11px;letter-spacing:2px;color:var(--dim2);margin-bottom:6px}
+.empty-sub{font-size:9px;letter-spacing:1px;color:var(--dim)}
+
+/* ── Notifications ── */
+.notif-wrap{position:fixed;top:72px;right:16px;width:300px;z-index:800;display:flex;flex-direction:column;gap:7px}
+.nitem{background:rgba(8,20,32,0.97);border:1px solid var(--red);border-radius:5px;padding:11px 14px;display:flex;gap:10px;animation:ni 0.4s ease both;box-shadow:0 0 14px rgba(255,34,68,0.2);cursor:pointer}
+.nitem.safe{border-color:var(--green);box-shadow:0 0 14px rgba(0,255,136,0.15)}
+.nitem.twilio{border-color:var(--purple);box-shadow:0 0 14px rgba(176,79,255,0.2)}
+@keyframes ni{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:translateX(0)}}
+@keyframes no{to{opacity:0;transform:translateX(28px)}}
+.nicon{font-size:18px;flex-shrink:0}
+.ntitle{font-size:10px;font-weight:700;color:var(--red);letter-spacing:1px}
+.nitem.safe .ntitle{color:var(--green)}
+.nitem.twilio .ntitle{color:var(--purple)}
+.nmsg{font-size:9px;color:var(--dim2);margin-top:2px;line-height:1.5}
+.nx{font-size:11px;color:var(--dim);cursor:pointer}
+
+/* ── Voice indicator ── */
+.vind{display:none;position:fixed;bottom:20px;right:20px;z-index:900;background:rgba(8,20,32,0.96);border:1px solid var(--red);border-radius:50px;padding:8px 16px;align-items:center;gap:8px;box-shadow:0 0 16px rgba(255,34,68,0.3);animation:vi 0.3s ease both}
+.vind.show{display:flex}
+@keyframes vi{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
+.vbars{display:flex;align-items:center;gap:2px}
+.vb{width:3px;border-radius:2px;background:var(--red)}
+.vb:nth-child(1){animation:vba 0.5s ease infinite;height:6px}
+.vb:nth-child(2){animation:vba 0.5s 0.1s ease infinite;height:12px}
+.vb:nth-child(3){animation:vba 0.5s 0.2s ease infinite;height:18px}
+.vb:nth-child(4){animation:vba 0.5s 0.3s ease infinite;height:12px}
+.vb:nth-child(5){animation:vba 0.5s 0.4s ease infinite;height:6px}
+@keyframes vba{0%,100%{transform:scaleY(0.4)}50%{transform:scaleY(1)}}
+.vlabel{font-size:9px;color:var(--red);letter-spacing:2px}
+
+/* countdown ring */
+.cdown{position:relative;width:40px;height:40px}
+.cdown svg{transform:rotate(-90deg)}
+.cdown-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace;font-size:10px;color:var(--cyan)}
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<div class="scanlines"></div>
+
+<!-- Notifications -->
+<div class="notif-wrap" id="notifWrap"></div>
+
+<!-- Voice indicator -->
+<div class="vind" id="vind">
+  <div class="vbars"><div class="vb"></div><div class="vb"></div><div class="vb"></div><div class="vb"></div><div class="vb"></div></div>
+  <span class="vlabel">VOICE ALERT</span>
+</div>
+
+<!-- Header -->
+<header class="hdr">
+  <div>
+    <div class="logo-text">GMAIL<span>SEC</span></div>
+    <div class="logo-sub">REAL-TIME SIGN-IN MONITOR v3.0</div>
+  </div>
+  <div class="hdr-r">
+    <div class="live-pill" id="livePill"><span class="live-dot"></span><span id="liveLabel">MONITORING</span></div>
+    <div class="clk" id="clk"></div>
+    <button class="btn-sm" onclick="testAlert()">⚡ TEST ALERT</button>
+    <button class="btn-sm red" onclick="stopMonitor()">⏹ STOP</button>
+    <a class="btn-sm" href="/">← LOGOUT</a>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- Account bar -->
+  <div class="acct-bar">
+    <div>
+      <div class="acct-label">MONITORING ACCOUNT</div>
+      <div class="acct-email" id="acctEmail">Loading...</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:16px">
+      <div>
+        <div class="acct-label">NEXT CHECK IN</div>
+        <div class="next-check" id="nextCheck">--s</div>
+      </div>
+      <div>
+        <div class="acct-label">LAST CHECK</div>
+        <div class="next-check" id="lastCheck">--</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats">
+    <div class="sc"><div class="sn" id="sn-checks">0</div><div class="sl">CHECKS DONE</div><div class="si">🔍</div></div>
+    <div class="sc events"><div class="sn" id="sn-events">0</div><div class="sl">EVENTS DETECTED</div><div class="si">⚠️</div></div>
+    <div class="sc crits"><div class="sn" id="sn-crits">0</div><div class="sl">CRITICAL</div><div class="si">🔴</div></div>
+    <div class="sc alerts"><div class="sn" id="sn-alerts">0</div><div class="sl">ALERTS SENT</div><div class="si">📞</div></div>
+  </div>
+
+  <!-- Monitor status -->
+  <div class="status-card" id="statusCard">
+    <div class="ctitle">SYSTEM STATUS</div>
+    <div class="status-grid">
+      <div class="status-item active" id="si-gmail">
+        <div class="si-icon">📧</div>
+        <div class="si-label">GMAIL API</div>
+        <div class="si-val ok" id="sv-gmail">CONNECTED</div>
+      </div>
+      <div class="status-item" id="si-twilio">
+        <div class="si-icon">📞</div>
+        <div class="si-label">TWILIO</div>
+        <div class="si-val" id="sv-twilio">CHECKING...</div>
+      </div>
+      <div class="status-item active" id="si-monitor">
+        <div class="si-icon">👁️</div>
+        <div class="si-label">MONITOR</div>
+        <div class="si-val ok" id="sv-monitor">ACTIVE</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Alert actions bar (shows on detection) -->
+  <div class="alert-actions" id="alertActions">
+    <div class="aa-icon">🚨</div>
+    <div class="aa-text">
+      <div class="aa-title" id="aaTitle">NEW SIGN-IN DETECTED!</div>
+      <div class="aa-sub" id="aaSub">Twilio voice call + SMS dispatched to your phone</div>
+    </div>
+    <div class="aa-btns">
+      <button class="btn-act voice" onclick="playVoice()">🔊 PLAY ALERT</button>
+      <button class="btn-act test"  onclick="testAlert()">📞 TEST CALL</button>
+      <button class="btn-act stop"  onclick="stopVoice()">⏹ STOP</button>
+    </div>
+  </div>
+
+  <!-- Twilio status row -->
+  <div class="twilio-row">
+    <div class="tw-card" id="twCallCard">
+      <div class="tw-icon" id="twCallIcon">📞</div>
+      <div style="flex:1">
+        <div class="tw-label">TWILIO VOICE CALL</div>
+        <div class="tw-status idle" id="twCallStatus">STANDBY</div>
+        <div class="tw-detail" id="twCallDetail">Waiting for threat detection...</div>
+      </div>
+    </div>
+    <div class="tw-card" id="twSmsCard">
+      <div class="tw-icon" id="twSmsIcon">💬</div>
+      <div style="flex:1">
+        <div class="tw-label">TWILIO SMS</div>
+        <div class="tw-status idle" id="twSmsStatus">STANDBY</div>
+        <div class="tw-detail" id="twSmsDetail">Waiting for threat detection...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Events feed -->
+  <div class="card">
+    <div class="ctitle" style="justify-content:space-between">
+      <span>SIGN-IN EVENT FEED</span>
+      <span style="color:var(--dim);font-size:8px" id="feedCount">0 EVENTS</span>
+    </div>
+    <div class="events-list" id="eventsList">
+      <div class="empty-state">
+        <div class="empty-icon">👁️</div>
+        <div class="empty-title">WATCHING FOR SIGN-INS</div>
+        <div class="empty-sub">Google security emails are monitored every 30s</div>
+        <div class="empty-sub" style="margin-top:6px">Any new device sign-in triggers an instant alert</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────
+let checksCount  = 0;
+let lastEventIds = new Set();
+let countdown    = 30;
+let prevStatus   = 'monitoring';
+
+// ── Clock ────────────────────────────────────────────────
+function tick(){ document.getElementById('clk').textContent = new Date().toUTCString().replace('GMT','UTC'); }
+setInterval(tick,1000); tick();
+
+// ── Countdown to next check ──────────────────────────────
+setInterval(()=>{
+  countdown = Math.max(0,countdown-1);
+  document.getElementById('nextCheck').textContent = countdown+'s';
+  if(countdown===0) countdown=30;
+},1000);
+
+// ── Voice ────────────────────────────────────────────────
+let currentUtter = null;
+function playVoice(txt){
+  if(!window.speechSynthesis) return;
+  stopVoice();
+  const email = document.getElementById('acctEmail').textContent;
+  const msg   = txt || `Security Alert! A new sign-in has been detected on your Google account ${email}. If this was not you, please secure your account immediately by visiting myaccount dot google dot com and changing your password.`;
+  currentUtter = new SpeechSynthesisUtterance(msg);
+  currentUtter.rate=0.88; currentUtter.pitch=0.8; currentUtter.volume=1;
+  currentUtter.onstart = ()=> document.getElementById('vind').classList.add('show');
+  currentUtter.onend   = ()=> document.getElementById('vind').classList.remove('show');
+  window.speechSynthesis.speak(currentUtter);
+}
+function stopVoice(){
+  if(window.speechSynthesis) window.speechSynthesis.cancel();
+  document.getElementById('vind').classList.remove('show');
+}
+
+// ── Notifications ────────────────────────────────────────
+function showNotif(title, msg, type='threat'){
+  const wrap = document.getElementById('notifWrap');
+  const el   = document.createElement('div');
+  el.className='nitem'+(type==='safe'?' safe':type==='twilio'?' twilio':'');
+  el.innerHTML=`
+    <div class="nicon">${type==='safe'?'✅':type==='twilio'?'📞':'🚨'}</div>
+    <div style="flex:1"><div class="ntitle">${title}</div><div class="nmsg">${msg}</div></div>
+    <div class="nx" onclick="this.parentElement.remove()">✕</div>`;
+  wrap.appendChild(el);
+  setTimeout(()=>{ el.style.animation='no 0.4s ease forwards'; setTimeout(()=>el.remove(),400); },7000);
+}
+
+// ── Format time ──────────────────────────────────────────
+function fmtTime(iso){
+  if(!iso) return '—';
+  try{ return new Date(iso).toLocaleString('en-IN',{timeZone:'Asia/Kolkata',dateStyle:'short',timeStyle:'short'}); }
+  catch{ return iso.slice(0,16); }
+}
+function fmtType(t){ return (t||'').replace(/_/g,' '); }
+
+// ── Twilio card update ───────────────────────────────────
+function setTwCard(type, state, icon, status, detail){
+  document.getElementById('tw'+type+'Card').className='tw-card '+state;
+  document.getElementById('tw'+type+'Icon').textContent=icon;
+  const s=document.getElementById('tw'+type+'Status');
+  s.className='tw-status '+state; s.textContent=status;
+  document.getElementById('tw'+type+'Detail').textContent=detail;
+}
+
+// ── Render event item ────────────────────────────────────
+function renderEventItem(ev, isNew){
+  const sev  = ev.severity||'HIGH';
+  const icons = {CRITICAL:'🔴',HIGH:'🟠',MEDIUM:'🟡',NEW_SIGNIN:'🔑',NEW_DEVICE:'📱',SUSPICIOUS_SIGNIN:'⚠️',BRUTE_FORCE:'🔨',TEST_ALERT:'🧪'};
+  const icon = icons[ev.type] || icons[sev] || '⚠️';
+
+  return `
+    <div class="event-item ${sev}${isNew?' new':''}">
+      <div class="ev-icon">${icon}</div>
+      <div class="ev-body">
+        <div class="ev-title ${sev}">
+          <span class="badge ${sev}">${sev}</span>${fmtType(ev.type)}
+        </div>
+        <div class="ev-subject">${ev.subject||ev.raw_snippet||'Google Security Alert'}</div>
+        <div class="ev-meta">
+          ${ev.device?`<span class="ev-tag">📱 ${ev.device}</span>`:''}
+          ${ev.app?`<span class="ev-tag">🌐 ${ev.app}</span>`:''}
+          ${ev.twilio?.voice?.status==='sent'?`<span class="ev-tag" style="color:var(--purple)">📞 CALL SENT</span>`:''}
+          ${ev.twilio?.sms?.status==='sent'?`<span class="ev-tag" style="color:var(--green)">💬 SMS SENT</span>`:''}
+        </div>
+      </div>
+      <div class="ev-time">${fmtTime(ev.detected_at)}</div>
+    </div>`;
+}
+
+// ── Poll server state ────────────────────────────────────
+async function pollState(){
+  try{
+    const res  = await fetch('/api/state');
+    const data = await res.json();
+
+    // Account
+    if(data.email) document.getElementById('acctEmail').textContent = data.email;
+
+    // Last check time
+    if(data.last_check){
+      document.getElementById('lastCheck').textContent = fmtTime(data.last_check);
+      checksCount++;
+      document.getElementById('sn-checks').textContent = checksCount;
+    }
+
+    // Stats
+    const events  = data.events||[];
+    const crits   = events.filter(e=>e.severity==='CRITICAL').length;
+    document.getElementById('sn-events').textContent = data.event_count||events.length;
+    document.getElementById('sn-crits').textContent  = crits;
+    document.getElementById('sn-alerts').textContent = data.alerts_sent||0;
+
+    // Twilio status
+    const twEl = document.getElementById('sv-twilio');
+    if(data.twilio_enabled){
+      twEl.className='si-val ok'; twEl.textContent='ENABLED';
+      document.getElementById('si-twilio').classList.add('active');
+    } else {
+      twEl.className='si-val warn'; twEl.textContent='DISABLED';
+    }
+
+    // Live pill + status card
+    const pill = document.getElementById('livePill');
+    const card = document.getElementById('statusCard');
+    if(data.status==='alert'){
+      pill.classList.add('alert');
+      document.getElementById('liveLabel').textContent='THREAT DETECTED';
+      card.classList.add('alerting');
+    } else {
+      pill.classList.remove('alert');
+      document.getElementById('liveLabel').textContent='MONITORING';
+      card.classList.remove('alerting');
+    }
+
+    // New events detected?
+    const newEvents = events.filter(e=> !lastEventIds.has(e.id||e.detected_at));
+    if(newEvents.length>0){
+      newEvents.forEach(ev=>{
+        lastEventIds.add(ev.id||ev.detected_at);
+
+        // Browser notifications
+        showNotif(`🚨 ${fmtType(ev.type)}`,`${ev.subject||'New sign-in detected'} — ${ev.severity}`);
+
+        // Update Twilio cards
+        const tw = ev.twilio||{};
+        if(tw.voice?.status==='sent'){
+          setTwCard('Call','sent','📲','CALL PLACED ✓',`SID: ${tw.voice.sid||'—'} → ${tw.voice.to||data.alert_phone}`);
+          showNotif('📞 VOICE CALL SENT',`Twilio called ${tw.voice.to||data.alert_phone}`,'twilio');
+        } else if(tw.voice?.status==='error'){
+          setTwCard('Call','error','❌','CALL FAILED',tw.voice.message||'Check credentials');
+        } else {
+          setTwCard('Call','idle','📞','SKIPPED',data.twilio_enabled?'No threat':'Enable TWILIO_ENABLED=true');
+        }
+        if(tw.sms?.status==='sent'){
+          setTwCard('Sms','sent','✅','SMS SENT ✓',`SID: ${tw.sms.sid||'—'}`);
+          showNotif('💬 SMS SENT',`Alert SMS sent via Twilio`,'twilio');
+        } else if(tw.sms?.status==='error'){
+          setTwCard('Sms','error','❌','SMS FAILED',tw.sms.message||'Check credentials');
+        }
+
+        // Alert banner
+        const ab = document.getElementById('alertActions');
+        ab.classList.add('show');
+        document.getElementById('aaTitle').textContent = `${fmtType(ev.type)} DETECTED!`;
+        document.getElementById('aaSub').textContent   = `${ev.subject||'New sign-in'} — Twilio alerts dispatched`;
+
+        // Auto voice alert
+        setTimeout(()=>playVoice(),500);
+
+        // OS notification
+        if('Notification' in window && Notification.permission==='granted'){
+          new Notification('🚨 GmailSec Alert', {body: `${fmtType(ev.type)}: ${ev.subject||'New sign-in detected'}`});
+        }
+      });
+
+      // Request notification permission
+      if('Notification' in window && Notification.permission==='default'){
+        Notification.requestPermission();
+      }
+    }
+
+    // Render events list
+    if(events.length>0){
+      document.getElementById('feedCount').textContent = events.length+' EVENT'+(events.length>1?'S':'');
+      document.getElementById('eventsList').innerHTML =
+        events.map((ev,i)=>renderEventItem(ev, i===0 && newEvents.length>0)).join('');
+    }
+
+    // Monitor stopped
+    if(!data.running){
+      document.getElementById('sv-monitor').className='si-val warn';
+      document.getElementById('sv-monitor').textContent='STOPPED';
+    }
+
+  } catch(e){
+    console.error('[Poll] Error:', e);
+  }
+}
+
+// ── Test alert ───────────────────────────────────────────
+async function testAlert(){
+  showNotif('🧪 TEST ALERT','Firing test Twilio call + SMS...','twilio');
+  setTwCard('Call','calling','📞','CALLING...','Placing test call via Twilio...');
+  setTwCard('Sms','calling','💬','SENDING...','Sending test SMS via Twilio...');
+  try{
+    const res  = await fetch('/api/test-alert',{method:'POST'});
+    const data = await res.json();
+    if(data.voice?.status==='sent'){
+      setTwCard('Call','sent','📲','TEST CALL SENT ✓',`SID: ${data.voice.sid}`);
+      showNotif('📞 TEST CALL SENT',`SID: ${data.voice.sid}`,'twilio');
+    } else {
+      setTwCard('Call','error','❌',data.voice?.message||'FAILED','Check TWILIO credentials in .env');
+    }
+    if(data.sms?.status==='sent'){
+      setTwCard('Sms','sent','✅','TEST SMS SENT ✓',`SID: ${data.sms.sid}`);
+    } else {
+      setTwCard('Sms','error','❌',data.sms?.message||'FAILED','Check TWILIO credentials in .env');
+    }
+  } catch(e){
+    showNotif('❌ Error', e.message,'threat');
+  }
+  playVoice('This is a test alert from Gmail Sec. Twilio integration is working correctly.');
+}
+
+// ── Stop monitor ─────────────────────────────────────────
+async function stopMonitor(){
+  if(!confirm('Stop monitoring and logout?')) return;
+  await fetch('/api/stop',{method:'POST'});
+  window.location.href='/';
+}
+
+// ── Start polling ────────────────────────────────────────
+pollState();
+setInterval(pollState, 5000);   // poll every 5s for new events
+setInterval(()=>countdown=30, 30000); // reset countdown every 30s
+</script>
+</body>
+</html>

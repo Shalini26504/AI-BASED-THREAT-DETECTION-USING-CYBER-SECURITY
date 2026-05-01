@@ -1,0 +1,7 @@
+flask==3.0.3
+twilio==9.3.3
+python-dotenv==1.0.1
+google-auth==2.30.0
+google-auth-oauthlib==1.2.0
+google-api-python-client==2.134.0
+requests==2.32.3
